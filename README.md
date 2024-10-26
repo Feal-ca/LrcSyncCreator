@@ -43,8 +43,13 @@ You will also need to have QT installed.
 ## User Interface
 
 ![LRC Sync Tool UI](#)
-
+![Screenshot of the working program](Exampleuse1.png)
 ---
+
+## Roadmap
+- Add "click to select"
+- Visual Changes to the interface
+- Add real-time current lyric under the player
 
 ## License
 
