@@ -4,7 +4,7 @@ import syncedlyrics
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QPushButton, QPlainTextEdit,
-    QVBoxLayout, QHBoxLayout, QWidget, QSlider, QFileDialog, QScrollArea, QLineEdit, QDialog, QDialogButtonBox, QStyleFactory
+    QVBoxLayout, QHBoxLayout, QWidget, QSlider, QFileDialog, QScrollArea, QLineEdit, QDialog, QDialogButtonBox, QStyleFactory, QMessageBox
 )
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import QUrl, Qt, QTime
@@ -137,12 +137,10 @@ class LrcSyncApp(QMainWindow):
 
     def _show_error_message(self, error_text: str):
         error_box = QMessageBox()
-        error_box.setIcon(QMessageBox.Critical)
+        error_box.setIcon(QMessageBox.Icon.Critical)  # Use QMessageBox.Icon.Critical for PyQt6
         error_box.setWindowTitle("Error")
-
         error_box.setText(error_text)
-        error_box.exec_()
-
+        error_box.exec()
 
     def toggle_play_pause(self):
         if self.player.isPlaying():
@@ -295,30 +293,33 @@ class LrcSyncApp(QMainWindow):
 
 
     def add_all_verses(self, lyrics):
-                lines = lyrics.split("\n")
-                pattern = r'(\[\d{2}:\d{2}\.\d{2}\])\s?(.+)'
-                for line in lines:
-                    match = re.match(pattern, line)
-                    if match:
-                        timestamp = match.group(1)
-                        lyric = match.group(2)
-                    else:
-                        timestamp = "[00:00.00]"
-                        lyric = line.strip()
+        self.clear_lyrics()
+        lines = lyrics.split("\n")
+        pattern = r'(\[\d{2}:\d{2}\.\d{2}\])\s?(.+)'
+        for line in lines:
+            match = re.match(pattern, line)
+            if match:
+                timestamp = match.group(1)
+                lyric = match.group(2)
+            else:
+                timestamp = "[00:00.00]"
+                lyric = line.strip()
 
 
-                    self.add_verse(timestamp, lyric)
-                    self.lyric_verses.append((timestamp, lyric))
+            self.add_verse(timestamp, lyric)
+            self.lyric_verses.append((timestamp, lyric))
 
 
     def load_lrc_file(self):
-        # file_name, _ = QFileDialog.getOpenFileName(self, "Open LRC File", "", "LRC Files (*.lrc);;All Files (*)")
         if self.song_is_loaded:
-            with open(f"/home/georgiou/Music/{self.song_filename}.lrc", 'r', encoding='utf-8') as file:
-                text = file.read()
-                self.add_all_verses(text)
+            try:
+                with open(f"/home/georgiou/Music/{self.song_filename}.lrc", 'r', encoding='utf-8') as file:
+                    text = file.read()
+                    self.add_all_verses(text)
+            except FileNotFoundError:
+                self._show_error_message("I couldn't find a .lrc with that name, maybe try *actually creating one*? ")
         else:
-            self._show_error_message("No song was loaded yet!?")
+            self._show_error_message("You did not load a song; yet expect me to find Lrc? Outrageous!")
 
 
     def save_lrc_file(self):
