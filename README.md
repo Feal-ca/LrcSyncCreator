@@ -1,7 +1,7 @@
 # LRC Sync Creator Tool
 
 LRC Sync Tool is a powerful application for synchronizing audio files with their lyrics, designed to assist in creating LRC files by visually managing and syncing lyrics to audio files in real-time. 
-![Demo](path/to/your/ExampleUseVideo.gif)
+![Demo](ExampleUseVideo.gif)
 ---
 
 ## Features
