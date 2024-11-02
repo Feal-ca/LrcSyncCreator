@@ -92,6 +92,7 @@ class LrcSyncApp(QMainWindow):
         # Scroll area contents: layout to hold all the verses
         self.scroll_content = QWidget()
         self.lyrics_layout = QVBoxLayout(self.scroll_content)
+        self.lyrics_layout.addStretch()  # Add stretch at the end to keep verses at fixed size
         self.scroll_area.setWidget(self.scroll_content)
 
         # Buttons
@@ -166,12 +167,13 @@ class LrcSyncApp(QMainWindow):
         self.player.setSource(QUrl.fromLocalFile(audio_file))
         self.file_label.setText(f"Loaded: {self.song_filename}")
         self.song_is_loaded = True
+        self.add_verse("[00:00.00]", "")
+        
         """
         if audio_file:
             self.player.setSource(QUrl.fromLocalFile(audio_file))
             self.player.play()
         """
-
 
     def _show_error_message(self, error_text: str):
         error_box = QMessageBox()
@@ -206,8 +208,10 @@ class LrcSyncApp(QMainWindow):
     def clear_lyrics(self):
         for i in reversed(range(self.lyrics_layout.count())):
             item = self.lyrics_layout.itemAt(i)
-            if item is not None:
-                self.delete_verse(item.widget())
+            if item is not None and not item.isEmpty():
+                widget = item.widget()
+                if widget is not None:
+                    self.delete_verse(widget)
         self.current_verse_index = 0
         self.update_verse_index_label()
 
@@ -231,14 +235,15 @@ class LrcSyncApp(QMainWindow):
         # Step 4: Iterate through all verses and shift timestamps
         for i in range(self.lyrics_layout.count()):
             verse_widget = self.lyrics_layout.itemAt(i).widget()
-            timestamp_label = verse_widget.layout().itemAt(0).widget()  # Get timestamp label
+            if verse_widget is not None:
+                timestamp_label = verse_widget.layout().itemAt(0).widget()  # Get timestamp label
 
-            # Get the current verse's timestamp and shift it
-            verse_timestamp = QTime.fromString(timestamp_label.text().strip("[]"), "mm:ss.zz")
-            new_timestamp = verse_timestamp.addMSecs(time_difference)
+                # Get the current verse's timestamp and shift it
+                verse_timestamp = QTime.fromString(timestamp_label.text().strip("[]"), "mm:ss.zz")
+                new_timestamp = verse_timestamp.addMSecs(time_difference)
 
-            # Update the timestamp label with the new time
-            timestamp_label.setText(f"[{new_timestamp.toString('mm:ss.zz')}]")
+                # Update the timestamp label with the new time
+                timestamp_label.setText(f"[{new_timestamp.toString('mm:ss.zz')}]")
 
 
     def get_lyrics_online(self):
@@ -286,7 +291,6 @@ class LrcSyncApp(QMainWindow):
 
         return -1
 
-
     def add_verse(self, timestamp="", verse="", after_index=None):
         verse_widget = QWidget()
         verse_layout = QHBoxLayout()
@@ -296,20 +300,26 @@ class LrcSyncApp(QMainWindow):
         verse_layout.addWidget(timestamp_label)
 
         verse_text = QLineEdit(verse)
-        verse_layout.addWidget(verse_text)
+        verse_layout.addWidget(verse_text, stretch=1)  # Give verse text stretch priority
+        
+        # Fixed size for all buttons - larger than before
+        button_size = 33
+        
         sync_button = QPushButton("⏲")
-        sync_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold")
-
+        sync_button.setFixedSize(button_size, button_size)
+        sync_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold; padding: 2px; margin: 0px;")
         sync_button.clicked.connect(lambda: self.sync_verse(timestamp_label))
         verse_layout.addWidget(sync_button)
 
         delete_button = QPushButton("🗑")
-        delete_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold")
+        delete_button.setFixedSize(button_size, button_size)
+        delete_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold; padding: 2px; margin: 0px;")
         delete_button.clicked.connect(lambda: self.delete_verse(verse_widget))
         verse_layout.addWidget(delete_button)
 
         add_button = QPushButton("+")
-        add_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold")
+        add_button.setFixedSize(button_size, button_size)
+        add_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold; padding: 2px; margin: 0px;")
         add_button.clicked.connect(lambda: self.add_verse("[00:00.00]", "", after_index=self.find_verse_index(timestamp_label.text())))
         verse_layout.addWidget(add_button)
 
@@ -323,10 +333,10 @@ class LrcSyncApp(QMainWindow):
         if after_index is not None and 0 <= after_index < self.lyrics_layout.count():
             self.lyrics_layout.insertWidget(after_index + 1, verse_widget)
         else:
-            self.lyrics_layout.addWidget(verse_widget)
+            # Insert before the stretch
+            self.lyrics_layout.insertWidget(self.lyrics_layout.count() - 1, verse_widget)
         
         self.update_verse_index_label()
-
 
     def delete_verse(self, verse_widget):
         if verse_widget is not None:
@@ -334,8 +344,8 @@ class LrcSyncApp(QMainWindow):
             if parent_layout:
                 parent_layout.removeWidget(verse_widget)
                 verse_widget.deleteLater()
-                if self.current_verse_index >= parent_layout.count():
-                    self.current_verse_index = max(0, parent_layout.count() - 1)
+                if self.current_verse_index >= parent_layout.count() - 1:  # -1 for stretch
+                    self.current_verse_index = max(0, parent_layout.count() - 2)  # -2 for stretch
                 self.update_verse_index_label()
 
 
@@ -373,12 +383,13 @@ class LrcSyncApp(QMainWindow):
         file_name, _ = QFileDialog.getSaveFileName(self, "Save LRC File", f"/home/georgiou/Music/{self.song_filename}.lrc", "LRC Files (*.lrc);;All Files (*)")
         if file_name:
             with open(file_name, 'w', encoding='utf-8') as file:
-                for i in range(self.lyrics_layout.count()):
+                for i in range(self.lyrics_layout.count() - 1):  # -1 to skip the stretch
                     verse_widget = self.lyrics_layout.itemAt(i).widget()
-                    verse_layout = verse_widget.layout()
-                    timestamp_label = verse_layout.itemAt(0).widget().text()
-                    verse_text = verse_layout.itemAt(1).widget().text()
-                    file.write(f"{timestamp_label} {verse_text}\n")
+                    if verse_widget is not None:
+                        verse_layout = verse_widget.layout()
+                        timestamp_label = verse_layout.itemAt(0).widget().text()
+                        verse_text = verse_layout.itemAt(1).widget().text()
+                        file.write(f"{timestamp_label} {verse_text}\n")
 
 
     def open_new_file(self):
@@ -387,12 +398,12 @@ class LrcSyncApp(QMainWindow):
 
 
     def update_verse_index_label(self):
-        total_verses = self.lyrics_layout.count()
+        total_verses = self.lyrics_layout.count() - 1  # -1 for stretch
         self.verse_index_label.setText(f"Verse: {self.current_verse_index + 1}/{total_verses}")
 
 
     def select_verse(self, direction):
-        total_verses = self.lyrics_layout.count()
+        total_verses = self.lyrics_layout.count() - 1  # -1 for stretch
         if total_verses == 0:
             return
 
@@ -426,7 +437,7 @@ class LrcSyncApp(QMainWindow):
 
 
     def sync_next_verse(self):
-        total_verses = self.lyrics_layout.count()
+        total_verses = self.lyrics_layout.count() - 1  # -1 for stretch
 
         if total_verses == 0:
             return
