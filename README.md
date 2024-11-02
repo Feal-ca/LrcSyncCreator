@@ -41,9 +41,17 @@ You will also need to have QT installed.
 ---
 
 ## User Interface
+The interface is quite intuitive:
 
-![LRC Sync Tool UI](#)
+
 ![Screenshot of the working program](Exampleuse1.png)
+
+- The top section features the play/pause button along with details about the currently playing track.
+- Below that, there is an interactive playback bar.
+- The bottom left section displays all the verses.
+- Each verse includes a timestamp, the lyrics, and three buttons: "sync," "delete," and "add."
+- On the right side, there are buttons for adding lyrics, saving the file, opening an MP3, and more.
+
 ---
 
 ## Roadmap
