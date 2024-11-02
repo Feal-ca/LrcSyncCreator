@@ -1,13 +1,12 @@
 import sys
 import re
 import syncedlyrics
-
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QPushButton, QPlainTextEdit,
     QVBoxLayout, QHBoxLayout, QWidget, QSlider, QFileDialog, QScrollArea, QLineEdit, QDialog, QDialogButtonBox, QStyleFactory, QMessageBox
 )
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PyQt6.QtCore import QUrl, Qt, QTime
+from PyQt6.QtCore import QUrl, Qt, QTime, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QKeySequence, QShortcut
 
 class LrcSyncApp(QMainWindow):
@@ -15,7 +14,6 @@ class LrcSyncApp(QMainWindow):
     lyric_verses: list[tuple[str,str]] # Timing and verse
     song_is_loaded: bool
     current_verse_index: int
-
     def __init__(self):
         super().__init__()
         self.song_is_loaded = False
@@ -30,18 +28,41 @@ class LrcSyncApp(QMainWindow):
         # Main layout
         main_layout = QVBoxLayout()
 
-        # Pause/play Shortcut
+        # Shortcuts
         self.space_shortcut = QShortcut(QKeySequence("Space"), self)
         self.space_shortcut.activated.connect(self.toggle_play_pause)
-        # Pause/play Shortcut
-        self.sync_next_verse_shortcut= QShortcut(QKeySequence("n"), self)
+        self.sync_next_verse_shortcut = QShortcut(QKeySequence("s"), self)
         self.sync_next_verse_shortcut.activated.connect(self.sync_next_verse)
-
+        self.up_shortcut = QShortcut(QKeySequence("Up"), self)
+        self.up_shortcut.activated.connect(lambda: self.select_verse(-1))
+        self.down_shortcut = QShortcut(QKeySequence("Down"), self)
+        self.down_shortcut.activated.connect(lambda: self.select_verse(1))
 
         # Top Section: File name, Play/Pause button, Seek Bar
         self.file_label = QLabel("No file loaded")
+        
+        # Play controls layout
+        play_controls_layout = QHBoxLayout()
+        # Left aligned play button
         self.play_pause_button = QPushButton("Play")
+        self.play_pause_button.setFixedSize(72, 33)
         self.play_pause_button.clicked.connect(self.toggle_play_pause)
+        play_controls_layout.addWidget(self.play_pause_button)
+        
+        # Add stretching before time label
+        play_controls_layout.addStretch()
+        
+        # Centered time label with bigger font
+        self.time_label = QLabel("00:00.00")
+        self.time_label.setStyleSheet("font-size: 18px")
+        play_controls_layout.addWidget(self.time_label)
+        
+        # Add stretching after time label
+        play_controls_layout.addStretch()
+        
+        # Right aligned verse index label
+        self.verse_index_label = QLabel("Verse: 0/0")
+        play_controls_layout.addWidget(self.verse_index_label, alignment=Qt.AlignmentFlag.AlignRight)
 
         # Seek Bar
         self.seek_bar = QSlider(Qt.Orientation.Horizontal)
@@ -51,7 +72,7 @@ class LrcSyncApp(QMainWindow):
         # Top layout
         top_layout = QVBoxLayout()
         top_layout.addWidget(self.file_label)
-        top_layout.addWidget(self.play_pause_button)
+        top_layout.addLayout(play_controls_layout)
         top_layout.addWidget(self.seek_bar)
 
         # Add top layout to the main layout
@@ -63,28 +84,42 @@ class LrcSyncApp(QMainWindow):
         self.scroll_area.setStyleSheet("background-color: #33364a")
         self.scroll_area.setWidgetResizable(True)
 
+        # Animation for verse selection
+        self.scroll_animation = QPropertyAnimation(self.scroll_area.verticalScrollBar(), b"value")
+        self.scroll_animation.setEasingCurve(QEasingCurve.Type.Linear)
+        self.scroll_animation.setDuration(150)  # Animation duration in milliseconds
+
         # Scroll area contents: layout to hold all the verses
         self.scroll_content = QWidget()
         self.lyrics_layout = QVBoxLayout(self.scroll_content)
         self.scroll_area.setWidget(self.scroll_content)
 
         # Buttons
-        self.open_file_button = QPushButton("Open MP3 File")
+        button_width= 88  # Set a fixed size for square buttons
+        button_height= int(0.75*button_width)  # Set a fixed size for square buttons
+
+        self.open_file_button = QPushButton("Open\nMP3 File")
+        self.open_file_button.setFixedSize(button_width, button_height)
         self.open_file_button.clicked.connect(self.open_new_file)
 
-        self.syncall_button = QPushButton("Resync All")
+        self.syncall_button = QPushButton("Resync\nAll")
+        self.syncall_button.setFixedSize(button_width, button_height)
         self.syncall_button.clicked.connect(self.sync_all)
 
-        self.load_button = QPushButton("Load LRC File")
+        self.load_button = QPushButton("Load\nLRC File")
+        self.load_button.setFixedSize(button_width, button_height)
         self.load_button.clicked.connect(self.load_lrc_file)
 
-        self.get_lyrics_button = QPushButton("Get Lyrics")
+        self.get_lyrics_button = QPushButton("Get\nLyrics")
+        self.get_lyrics_button.setFixedSize(button_width, button_height)
         self.get_lyrics_button.clicked.connect(self.get_lyrics_online)
 
-        self.save_button = QPushButton("Save LRC File")
+        self.save_button = QPushButton("Save\nLRC File")
+        self.save_button.setFixedSize(button_width, button_height)
         self.save_button.clicked.connect(self.save_lrc_file)
 
-        self.clear_button = QPushButton("Clear Lyrics")
+        self.clear_button = QPushButton("Clear\nLyrics")
+        self.clear_button.setFixedSize(button_width, button_height)
         self.clear_button.clicked.connect(self.clear_lyrics)
 
         # Button layout (Vertical on the right)
@@ -95,12 +130,15 @@ class LrcSyncApp(QMainWindow):
         button_layout.addWidget(self.get_lyrics_button)
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.clear_button)
-        button_layout.addStretch()
+        button_layout.addStretch(1)
+        
+        # Set spacing between buttons
+        button_layout.setSpacing(10)
 
         # Main content layout (Lyrics on left, buttons on right)
         content_layout = QHBoxLayout()
-        content_layout.addWidget(self.scroll_area)
-        content_layout.addLayout(button_layout)
+        content_layout.addWidget(self.scroll_area, stretch=4)  # Give more space to lyrics
+        content_layout.addLayout(button_layout, stretch=1)     # Less space for buttons
 
         # Add content layout to the main layout
         main_layout.addLayout(content_layout)
@@ -157,6 +195,8 @@ class LrcSyncApp(QMainWindow):
 
     def position_changed(self, position):
         self.seek_bar.setValue(position)
+        current_time = QTime(0, 0).addMSecs(position)
+        self.time_label.setText(current_time.toString("mm:ss.zz"))
 
 
     def duration_changed(self, duration):
@@ -168,6 +208,8 @@ class LrcSyncApp(QMainWindow):
             item = self.lyrics_layout.itemAt(i)
             if item is not None:
                 self.delete_verse(item.widget())
+        self.current_verse_index = 0
+        self.update_verse_index_label()
 
 
     def sync_all(self):
@@ -255,19 +297,19 @@ class LrcSyncApp(QMainWindow):
 
         verse_text = QLineEdit(verse)
         verse_layout.addWidget(verse_text)
-
         sync_button = QPushButton("⏲")
-        sync_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea")
+        sync_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold")
+
         sync_button.clicked.connect(lambda: self.sync_verse(timestamp_label))
         verse_layout.addWidget(sync_button)
 
         delete_button = QPushButton("🗑")
-        delete_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea")
+        delete_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold")
         delete_button.clicked.connect(lambda: self.delete_verse(verse_widget))
         verse_layout.addWidget(delete_button)
 
         add_button = QPushButton("+")
-        add_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea")
+        add_button.setStyleSheet("background-color: #4a34aa; border: 1px solid #8a74ea; font-size: 16px; font-weight: bold")
         add_button.clicked.connect(lambda: self.add_verse("[00:00.00]", "", after_index=self.find_verse_index(timestamp_label.text())))
         verse_layout.addWidget(add_button)
 
@@ -282,6 +324,8 @@ class LrcSyncApp(QMainWindow):
             self.lyrics_layout.insertWidget(after_index + 1, verse_widget)
         else:
             self.lyrics_layout.addWidget(verse_widget)
+        
+        self.update_verse_index_label()
 
 
     def delete_verse(self, verse_widget):
@@ -290,6 +334,9 @@ class LrcSyncApp(QMainWindow):
             if parent_layout:
                 parent_layout.removeWidget(verse_widget)
                 verse_widget.deleteLater()
+                if self.current_verse_index >= parent_layout.count():
+                    self.current_verse_index = max(0, parent_layout.count() - 1)
+                self.update_verse_index_label()
 
 
     def add_all_verses(self, lyrics):
@@ -339,6 +386,45 @@ class LrcSyncApp(QMainWindow):
         self.open_file()
 
 
+    def update_verse_index_label(self):
+        total_verses = self.lyrics_layout.count()
+        self.verse_index_label.setText(f"Verse: {self.current_verse_index + 1}/{total_verses}")
+
+
+    def select_verse(self, direction):
+        total_verses = self.lyrics_layout.count()
+        if total_verses == 0:
+            return
+
+        # Reset current verse style
+        if 0 <= self.current_verse_index < total_verses:
+            current_verse_widget = self.lyrics_layout.itemAt(self.current_verse_index).widget()
+            current_verse_widget.setStyleSheet("QWidget#verse { background-color: #232340; border-radius: 16px; border: 2px solid #5a44aa; padding: 10px;}")
+
+        # Update index
+        self.current_verse_index = (self.current_verse_index + direction) % total_verses
+
+        # Style new current verse
+        new_verse_widget = self.lyrics_layout.itemAt(self.current_verse_index).widget()
+        new_verse_widget.setStyleSheet("background-color: #232340; border-radius: 16px; border: 2px solid #aa94fa; padding: 10px;")
+        
+        # Center the selected verse in the scroll area with animation
+        scroll_bar = self.scroll_area.verticalScrollBar()
+        widget_pos = new_verse_widget.pos().y()
+        viewport_height = self.scroll_area.viewport().height()
+        widget_height = new_verse_widget.height()
+        
+        # Calculate position to center the widget
+        center_position = widget_pos - (viewport_height - widget_height) // 2
+        
+        # Set up and start the scroll animation
+        self.scroll_animation.setStartValue(scroll_bar.value())
+        self.scroll_animation.setEndValue(center_position)
+        self.scroll_animation.start()
+
+        self.update_verse_index_label()
+
+
     def sync_next_verse(self):
         total_verses = self.lyrics_layout.count()
 
@@ -357,53 +443,72 @@ class LrcSyncApp(QMainWindow):
         self.sync_verse(timestamp_label)
         self.current_verse_index += 1
 
-        if self.lyrics_layout.itemAt(self.current_verse_index) is not None:
+        if self.current_verse_index < total_verses:
             next_verse_widget = self.lyrics_layout.itemAt(self.current_verse_index).widget()
             next_verse_widget.setStyleSheet("background-color: #232340; border-radius: 16px; border: 2px solid #aa94fa; padding: 10px;")
 
+        self.update_verse_index_label()
 
 
 app = QApplication(sys.argv)
 app.setStyleSheet("""
-
-     QPushButton {
-        background-color: #4a34aa;
-        color: white;
+    /* Base colors */
+    * {
+        color: #ffffff;
         font-size: 14px;
+    }
+
+    QPushButton {
+        background-color: #4a34aa;
         border-radius: 15px;
-        padding: 8px;
+        padding: 8px 16px;
+        border: 1px solid #5a44aa;
     }
+
     QPushButton:hover {
-        background-color: #6555aa;
+        background-color: #5a44aa;
+        border: 1px solid #6a54ba;
     }
+
+    QPushButton:pressed {
+        background-color: #3a24aa;
+    }
+
     QLabel {
         font-size: 16px;
         border-radius: 10px;
-
+        padding: 4px;
     }
+
+    /* Scrollbar styling */
     QScrollBar:vertical {
         border: none;
-        background-color: #c0c0c0;    /* Background of the scrollbar */
-        width: 12px;                   /* Scrollbar width */
-        margin: 0px 2px 0px 2px;       /* Margins around scrollbar */
+        background-color: #232340;
+        width: 12px;
+        margin: 0px;
+        border-radius: 6px;
     }
 
     QScrollBar::handle:vertical {
-        background-color: #5e5e5e;     /* Scroll handle color */
-        min-height: 30px;              /* Minimum height of the handle */
+        background-color: #4a34aa;
+        min-height: 30px;
+        border-radius: 6px;
     }
 
     QScrollBar::handle:vertical:hover {
-        background-color: #787878;     /* Color on hover */
+        background-color: #5a44aa;
     }
 
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    QScrollBar::add-line:vertical,
+    QScrollBar::sub-line:vertical {
         border: none;
         background: none;
+        height: 0px;
     }
 
-    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-        background: none;              /* No background for the page sections */
+    QScrollBar::add-page:vertical,
+    QScrollBar::sub-page:vertical {
+        background: none;
     }
 """)
 
